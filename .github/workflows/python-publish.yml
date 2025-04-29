@@ -7,13 +7,16 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+      # IMPORTANT: this permission is mandatory for trusted publishing
+      id-token: write
 
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        submodules: recursive  # Ensure submodules are included
-        fetch-depth: 0  # Needed for versioning
+        submodules: recursive
+        fetch-depth: 0
 
     - name: Set up Python
       uses: actions/setup-python@v4
@@ -34,8 +37,5 @@ jobs:
     - name: Check distribution
       run: twine check dist/*
 
-    - name: Publish Package
-      uses: pypa/gh-action-pypi-publish@v1.8.11
-      with:
-        user: __token__
-        password: ${{ secrets.PYPI_API_TOKEN }}
+    - name: Publish package
+      uses: pypa/gh-action-pypi-publish@release/v1
