@@ -2,3 +2,5 @@
 _skbuild
 dist/*
 .vscode/*
+build/*
+agri.egg-info/*
