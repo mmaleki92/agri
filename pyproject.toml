@@ -1,3 +1,33 @@
 [build-system]
-requires = ["setuptools>=42", "wheel", "scikit-build"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[project]
+name = "agri"
+version = "0.1.0"
+description = "Anywhere GitHub Repository Importer"
+readme = "README.md"
+authors = [
+    {name = "Morteza Maleki", email = "maleki.morteza92@gmail.com"}
+]
+license = {text = "MIT"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "gitpython",
+    "keyring",
+    "tqdm",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/mmaleki92/agri"
+"Bug Tracker" = "https://github.com/mmaleki92/agri/issues"
