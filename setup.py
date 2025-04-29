@@ -7,8 +7,9 @@ setup(
     install_requires=[
         "gitpython>=3.1.0",
         "keyring>=23.0.0",
+        "tqdm"
     ],
-    author="Your Name",
+    author="Morteza Maleki",
     author_email="maleki.morteza92@gmail.com",
     description="Import Python modules directly from GitHub repositories",
     keywords="github, import, repository, private",
