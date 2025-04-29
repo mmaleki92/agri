@@ -1,4 +1,4 @@
-[![Upload Python Package](https://github.com/mmaleki92/pyising/actions/workflows/python-publish.yml/badge.svg)](https://github.com/mmaleki92/agri/actions/workflows/python-publish.yml)
+[![Upload Python Package](https://github.com/mmaleki92/agri/actions/workflows/python-publish.yml/badge.svg)](https://github.com/mmaleki92/agri/actions/workflows/python-publish.yml)
 
 # Anywhere github repository import (Agri)
 
