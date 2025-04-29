@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name="gri",
+    name="agri",
     version="0.1.0",
     packages=find_packages(),
     install_requires=[
@@ -12,7 +12,7 @@ setup(
     author_email="maleki.morteza92@gmail.com",
     description="Import Python modules directly from GitHub repositories",
     keywords="github, import, repository, private",
-    url="https://github.com/mmaleki92/gri",
+    url="https://github.com/mmaleki92/agri",
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",

@@ -7,7 +7,7 @@ import keyring
 from typing import Optional
 
 # Service name for keyring
-SERVICE_NAME = "gri"
+SERVICE_NAME = "agri"
 ACCOUNT_NAME = "github_token"
 
 def authenticate(token: Optional[str] = None, store: bool = True) -> str:

@@ -35,7 +35,7 @@ def _get_repo_url(repo_path: str) -> str:
 def _get_local_path(repo_name: str) -> str:
     """Get local path for storing the repository."""
     # Create a unique path in the temp directory
-    base_dir = os.path.join(tempfile.gettempdir(), "gri")
+    base_dir = os.path.join(tempfile.gettempdir(), "agri")
     os.makedirs(base_dir, exist_ok=True)
     return os.path.join(base_dir, repo_name)
 
