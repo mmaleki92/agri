@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="agri",
-    version="0.1.0",
+    version="0.1.1",
     author="Morteza Maleki",
     author_email="maleki.morteza92@gmail.com",
     description="Anywhere GitHub Repository Importer",
