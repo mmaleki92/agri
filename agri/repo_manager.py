@@ -177,6 +177,398 @@ def _clone_repo(repo_path: str, branch: str = "main") -> str:
     return local_path
 
 
+def commit_files(repo_path: str, 
+                local_source: Union[str, Dict[str, str]], 
+                repo_target: str = "", 
+                message: str = "Update files", 
+                branch: str = "main", 
+                push: bool = True) -> bool:
+    """
+    Commit local files or folders to a repository.
+    
+    Args:
+        repo_path: The path to the repository (username/repo_name)
+        local_source: Path to local file/folder, or dict mapping local paths to repository paths
+        repo_target: Target path within the repository (default: root of repository)
+                    (only used if local_source is a string)
+        message: Commit message
+        branch: Branch to commit to
+        push: Whether to push changes to remote repository
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    # Parse repo name from path
+    if "/" in repo_path:
+        repo_name = repo_path.split("/")[-1]
+    else:
+        repo_name = repo_path
+    
+    if repo_name.endswith(".git"):
+        repo_name = repo_name[:-4]
+    
+    local_repo_path = _get_local_path(repo_name)
+    
+    # Check if repository exists locally
+    if not os.path.exists(local_repo_path):
+        print(f"⚠️ Repository {repo_path} not found locally. Cloning fresh copy...")
+        _clone_repo(repo_path, branch)
+    
+    try:
+        # Open the repository
+        repo = git.Repo(local_repo_path)
+        
+        # Update remote URL with token
+        auth_url = _get_repo_url(repo_path)
+        origin = repo.remote(name="origin")
+        origin.set_url(auth_url)
+        
+        # Ensure we're on the right branch
+        current_branch = repo.active_branch.name
+        if current_branch != branch:
+            print(f"🔄 Switching from branch '{current_branch}' to '{branch}'")
+            try:
+                repo.git.checkout(branch)
+            except git.exc.GitCommandError:
+                # Branch doesn't exist locally, try to find it on remote
+                try:
+                    print(f"🔍 Branch '{branch}' not found locally, checking remote...")
+                    repo.git.fetch('origin', branch)
+                    repo.git.checkout('-b', branch, f'origin/{branch}')
+                except git.exc.GitCommandError:
+                    # Branch doesn't exist remotely either, create it
+                    print(f"🌱 Creating new branch '{branch}'")
+                    repo.git.checkout('-b', branch)
+        
+        # Pull latest changes
+        try:
+            print(f"⬇️ Pulling latest changes from origin/{branch}...")
+            repo.git.pull('origin', branch)
+        except git.exc.GitCommandError as e:
+            if "no tracking information" in str(e):
+                print(f"⚠️ Branch '{branch}' has no tracking information. Skipping pull.")
+            else:
+                raise
+        
+        # Process file copying
+        print(f"📝 Copying files to repository...")
+        files_copied = False
+        
+        # Handle different input types
+        if isinstance(local_source, str):
+            # Single source path with target directory
+            files_copied = _copy_to_repo(local_source, local_repo_path, repo_target)
+        elif isinstance(local_source, dict):
+            # Multiple source paths with individual target paths
+            for src, dst in local_source.items():
+                if _copy_to_repo(src, local_repo_path, dst):
+                    files_copied = True
+        else:
+            raise ValueError("local_source must be either a string path or a dict mapping source to target paths")
+        
+        if not files_copied:
+            print("ℹ️ No files were copied")
+            return False
+            
+        # Stage all changes
+        repo.git.add('--all')
+        
+        # Check if there are changes to commit
+        if not repo.is_dirty() and len(repo.index.diff("HEAD")) == 0:
+            print("ℹ️ No changes to commit")
+            return False
+        
+        # Commit changes
+        print(f"💾 Committing changes to {branch} branch...")
+        repo.git.commit('-m', message)
+        
+        if push:
+            # Push to remote
+            print(f"🚀 Pushing changes to remote repository...")
+            repo.git.push('--set-upstream', 'origin', branch)
+            print(f"✅ Changes pushed successfully")
+        
+        return True
+        
+    except git.exc.GitCommandError as e:
+        print(f"❌ Error committing changes: {e}")
+        return False
+
+def _copy_to_repo(source_path: str, repo_path: str, repo_target: str) -> bool:
+    """
+    Helper function to copy files or directories to the repository.
+    
+    Args:
+        source_path: Local file or directory path
+        repo_path: Local path to the repository
+        repo_target: Target path within the repository
+        
+    Returns:
+        True if files were copied, False otherwise
+    """
+    # Calculate full target path in the repository
+    target_path = os.path.join(repo_path, repo_target.lstrip('/'))
+    
+    # Make sure target directory exists
+    if os.path.isfile(source_path):
+        os.makedirs(os.path.dirname(target_path) if repo_target else target_path, exist_ok=True)
+    else:
+        os.makedirs(target_path, exist_ok=True)
+    
+    try:
+        # Handle different source types
+        if os.path.isfile(source_path):
+            # It's a file
+            if os.path.isdir(target_path):
+                # Target is a directory, put file inside it
+                dest = os.path.join(target_path, os.path.basename(source_path))
+            else:
+                # Target is a file path
+                dest = target_path
+                
+            shutil.copy2(source_path, dest)
+            print(f"📄 Copied {source_path} -> {dest}")
+            return True
+            
+        elif os.path.isdir(source_path):
+            # It's a directory, copy all contents
+            items_copied = 0
+            for item in os.listdir(source_path):
+                s = os.path.join(source_path, item)
+                d = os.path.join(target_path, item)
+                
+                if os.path.isdir(s):
+                    shutil.copytree(s, d, dirs_exist_ok=True)
+                    print(f"📁 Copied directory {s} -> {d}")
+                else:
+                    shutil.copy2(s, d)
+                    print(f"📄 Copied {s} -> {d}")
+                items_copied += 1
+                
+            return items_copied > 0
+        else:
+            print(f"⚠️ Source path {source_path} does not exist")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error copying files: {e}")
+        return False
+
+def create_file_and_commit(repo_path: str, 
+                          file_content: str,
+                          repo_file_path: str,
+                          message: str = "Add or update file",
+                          branch: str = "main",
+                          push: bool = True) -> bool:
+    """
+    Create or update a file with specified content and commit it to the repository.
+    
+    Args:
+        repo_path: The path to the repository (username/repo_name)
+        file_content: Content to write to the file
+        repo_file_path: Path to the file within the repository
+        message: Commit message
+        branch: Branch to commit to
+        push: Whether to push changes to remote repository
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    # Parse repo name from path
+    if "/" in repo_path:
+        repo_name = repo_path.split("/")[-1]
+    else:
+        repo_name = repo_path
+    
+    if repo_name.endswith(".git"):
+        repo_name = repo_name[:-4]
+    
+    local_repo_path = _get_local_path(repo_name)
+    
+    # Check if repository exists locally
+    if not os.path.exists(local_repo_path):
+        print(f"⚠️ Repository {repo_path} not found locally. Cloning fresh copy...")
+        _clone_repo(repo_path, branch)
+    
+    try:
+        # Open the repository
+        repo = git.Repo(local_repo_path)
+        
+        # Update remote URL with token
+        auth_url = _get_repo_url(repo_path)
+        origin = repo.remote(name="origin")
+        origin.set_url(auth_url)
+        
+        # Ensure we're on the right branch
+        current_branch = repo.active_branch.name
+        if current_branch != branch:
+            print(f"🔄 Switching from branch '{current_branch}' to '{branch}'")
+            try:
+                repo.git.checkout(branch)
+            except git.exc.GitCommandError:
+                # Branch doesn't exist locally, try to find it on remote
+                try:
+                    print(f"🔍 Branch '{branch}' not found locally, checking remote...")
+                    repo.git.fetch('origin', branch)
+                    repo.git.checkout('-b', branch, f'origin/{branch}')
+                except git.exc.GitCommandError:
+                    # Branch doesn't exist remotely either, create it
+                    print(f"🌱 Creating new branch '{branch}'")
+                    repo.git.checkout('-b', branch)
+        
+        # Pull latest changes
+        try:
+            print(f"⬇️ Pulling latest changes from origin/{branch}...")
+            repo.git.pull('origin', branch)
+        except git.exc.GitCommandError as e:
+            if "no tracking information" in str(e):
+                print(f"⚠️ Branch '{branch}' has no tracking information. Skipping pull.")
+            else:
+                raise
+        
+        # Create or update the file
+        file_path = os.path.join(local_repo_path, repo_file_path.lstrip('/'))
+        
+        # Create directory if it doesn't exist
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        
+        # Write content to file
+        with open(file_path, 'w', encoding='utf-8') as f:
+            f.write(file_content)
+            
+        print(f"✏️ Created/updated file: {repo_file_path}")
+        
+        # Stage the file
+        repo.git.add(file_path)
+        
+        # Check if there are changes to commit
+        if not repo.is_dirty() and len(repo.index.diff("HEAD")) == 0:
+            print("ℹ️ No changes to commit")
+            return False
+        
+        # Commit changes
+        print(f"💾 Committing changes to {branch} branch...")
+        repo.git.commit('-m', message)
+        
+        if push:
+            # Push to remote
+            print(f"🚀 Pushing changes to remote repository...")
+            repo.git.push('--set-upstream', 'origin', branch)
+            print(f"✅ Changes pushed successfully")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error creating and committing file: {e}")
+        return False
+
+def delete_files_and_commit(repo_path: str, 
+                          repo_file_paths: Union[str, List[str]],
+                          message: str = "Delete files",
+                          branch: str = "main",
+                          push: bool = True) -> bool:
+    """
+    Delete files or directories from the repository and commit the changes.
+    
+    Args:
+        repo_path: The path to the repository (username/repo_name)
+        repo_file_paths: Path(s) to the file(s) or directory(ies) to delete within the repository
+        message: Commit message
+        branch: Branch to commit to
+        push: Whether to push changes to remote repository
+        
+    Returns:
+        True if successful, False otherwise
+    """
+    # Convert single path to list
+    if isinstance(repo_file_paths, str):
+        repo_file_paths = [repo_file_paths]
+        
+    # Parse repo name from path
+    if "/" in repo_path:
+        repo_name = repo_path.split("/")[-1]
+    else:
+        repo_name = repo_path
+    
+    if repo_name.endswith(".git"):
+        repo_name = repo_name[:-4]
+    
+    local_repo_path = _get_local_path(repo_name)
+    
+    # Check if repository exists locally
+    if not os.path.exists(local_repo_path):
+        print(f"⚠️ Repository {repo_path} not found locally. Cloning fresh copy...")
+        _clone_repo(repo_path, branch)
+    
+    try:
+        # Open the repository
+        repo = git.Repo(local_repo_path)
+        
+        # Update remote URL with token
+        auth_url = _get_repo_url(repo_path)
+        origin = repo.remote(name="origin")
+        origin.set_url(auth_url)
+        
+        # Handle branch switching and pulling as in other methods
+        current_branch = repo.active_branch.name
+        if current_branch != branch:
+            print(f"🔄 Switching from branch '{current_branch}' to '{branch}'")
+            try:
+                repo.git.checkout(branch)
+            except git.exc.GitCommandError:
+                try:
+                    repo.git.fetch('origin', branch)
+                    repo.git.checkout('-b', branch, f'origin/{branch}')
+                except git.exc.GitCommandError:
+                    print(f"🌱 Creating new branch '{branch}'")
+                    repo.git.checkout('-b', branch)
+        
+        try:
+            print(f"⬇️ Pulling latest changes from origin/{branch}...")
+            repo.git.pull('origin', branch)
+        except git.exc.GitCommandError as e:
+            if "no tracking information" in str(e):
+                print(f"⚠️ Branch '{branch}' has no tracking information. Skipping pull.")
+            else:
+                raise
+        
+        # Delete files
+        files_deleted = False
+        for path in repo_file_paths:
+            full_path = os.path.join(local_repo_path, path.lstrip('/'))
+            if os.path.exists(full_path):
+                if os.path.isdir(full_path):
+                    shutil.rmtree(full_path)
+                    print(f"🗑️ Deleted directory: {path}")
+                else:
+                    os.remove(full_path)
+                    print(f"🗑️ Deleted file: {path}")
+                files_deleted = True
+            else:
+                print(f"⚠️ Path not found: {path}")
+        
+        if not files_deleted:
+            print("ℹ️ No files were deleted")
+            return False
+        
+        # Stage deletions
+        repo.git.add('--all')
+        
+        # Commit changes
+        print(f"💾 Committing changes to {branch} branch...")
+        repo.git.commit('-m', message)
+        
+        if push:
+            # Push to remote
+            print(f"🚀 Pushing changes to remote repository...")
+            repo.git.push('--set-upstream', 'origin', branch)
+            print(f"✅ Changes pushed successfully")
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error deleting files and committing: {e}")
+        return False
 def import_repo(repo_path: str, branch: str = "main", show_structure: bool = True) -> LazyModule:
     """
     Import a GitHub repository as a lazily-loaded module structure.
