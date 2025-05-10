@@ -776,3 +776,72 @@ def update_repo(repo_path: str, branch: str = "main", show_structure: bool = Tru
         print("⚠️ Attempting to clone fresh copy...")
         shutil.rmtree(local_path, ignore_errors=True)
         return import_repo(repo_path, branch, show_structure)
+
+def get_repo_structure(repo_name: str, ignore_patterns: List[str] = None) -> str:
+    """
+    Get the structure of an imported repository.
+    
+    Args:
+        repo_name: The name of the repository or the full path (username/repo_name)
+        ignore_patterns: List of patterns to ignore (e.g. [".git", "__pycache__"])
+        
+    Returns:
+        A formatted string showing the repository structure
+    """
+    if ignore_patterns is None:
+        ignore_patterns = [".git", "__pycache__", ".pytest_cache", ".ipynb_checkpoints", 
+                           "venv", "env", ".env", ".github", ".vscode"]
+    
+    # Extract the short name from the full path if needed
+    if "/" in repo_name:
+        repo_short_name = repo_name.split("/")[-1]
+    else:
+        repo_short_name = repo_name
+        
+    if repo_short_name.endswith(".git"):
+        repo_short_name = repo_short_name[:-4]
+    
+    # Try finding by direct name match first
+    for cache_key, path in _REPO_PATHS.items():
+        if f"{repo_name}:" in cache_key or f"/{repo_short_name}:" in cache_key:
+            print(f"📂 Repository structure for {repo_name}:")
+            return get_structure(path, ignore_patterns=ignore_patterns)
+    
+    # If not found by direct match, try partial match
+    for cache_key, path in _REPO_PATHS.items():
+        if repo_short_name in cache_key:
+            print(f"📂 Repository structure for {repo_name}:")
+            return get_structure(path, ignore_patterns=ignore_patterns)
+    
+    # If not found in cache, try to find it in the temporary directory
+    local_path = _get_local_path(repo_short_name)
+    if os.path.exists(local_path):
+        print(f"📂 Repository structure for {repo_name} (from local path):")
+        return get_structure(local_path, ignore_patterns=ignore_patterns)
+    
+    # Check if it's a LazyModule object instead of a path
+    if hasattr(repo_name, '__path__') and os.path.exists(repo_name.__path__):
+        print(f"📂 Repository structure:")
+        return get_structure(repo_name.__path__, ignore_patterns=ignore_patterns)
+    
+    return f"⚠️ Repository {repo_name} not found in cache or local directory"
+
+def list_imported_repos() -> List[str]:
+    """
+    List all imported repositories in the cache.
+    
+    Returns:
+        A list of repository names that have been imported.
+    """
+    repos = []
+    for cache_key in _REPO_CACHE.keys():
+        # cache_key is in format "owner/repo:branch"
+        repo_info = cache_key.split(':')
+        if len(repo_info) >= 2:
+            repo_path = repo_info[0]
+            branch = repo_info[1]
+            repos.append(f"{repo_path} (branch: {branch})")
+        else:
+            repos.append(cache_key)
+    
+    return repos
